@@ -42,6 +42,138 @@ Endpoints required by assignment:
 - GET `/logs` — View saved call logs (in-memory)
 - GET `/health` — Health check
 
+POST `/getPatient` request/response:
+
+Request body (JSON):
+
+```json
+{
+  "medicalID": "PAT001"
+}
+```
+
+Successful response (200):
+
+```json
+{
+  "medicalID": "PAT001",
+  "name": "John Smith",
+  "age": 45,
+  "condition": "Hypertension",
+  "medications": ["Lisinopril 10mg", "Metformin 500mg"],
+  "lastVisit": "2024-01-15",
+  "allergies": ["Penicillin", "Shellfish"],
+  "phone": "(555) 123-4567",
+  "email": "john.smith@email.com",
+  "address": "123 Main St, Anytown, USA"
+}
+```
+
+Error responses:
+
+- 400 when `medicalID` is missing:
+
+```json
+{ "error": "medicalID is required in arguments" }
+```
+
+- 404 when no patient is found:
+
+```json
+{ "error": "Patient not found" }
+```
+
+POST `/precall` request/response:
+
+Request body: none (OpenMic will POST with metadata; this endpoint does not require fields)
+
+Successful response (200):
+
+```json
+{
+  "call": {
+    "dynamic_variables": {
+      "name": "John Smith",
+      "age": 45,
+      "lastVisit": "2024-01-15"
+    }
+  }
+}
+```
+
+Error response (500, unexpected):
+
+```json
+{
+  "success": false,
+  "error": "Internal server error",
+  "message": "Failed to retrieve precall data"
+}
+```
+
+POST `/postcall` request/response:
+
+Request body (JSON) — `sessionId` required, other fields optional:
+
+```json
+{
+  "type": "end-of-call-report",
+  "sessionId": "abc123",
+  "toPhoneNumber": "+15551234567",
+  "fromPhoneNumber": "+15557654321",
+  "callType": "phonecall",
+  "disconnectionReason": "user_ended_call",
+  "direction": "outbound",
+  "createdAt": "2024-03-01T10:00:00.000Z",
+  "endedAt": "2024-03-01T10:05:12.000Z",
+  "transcript": [
+    { "speaker": "Agent", "text": "Hello, this is your medical intake agent." },
+    { "speaker": "Caller", "text": "Hi..." }
+  ],
+  "summary": "Caller provided Medical ID, allergies and medications confirmed.",
+  "isSuccessful": true,
+  "dynamicVariables": {
+    "medicalID": "PAT001",
+    "name": "John Smith"
+  }
+}
+```
+
+Successful response (200):
+
+```json
+{
+  "status": "saved",
+  "success": true,
+  "sessionId": "abc123",
+  "callSuccessful": true,
+  "disconnectionReason": "user_ended_call",
+  "timestamp": "2024-03-01T10:05:12.345Z"
+}
+```
+
+Error responses:
+
+- 400 when `sessionId` is missing:
+
+```json
+{
+  "success": false,
+  "error": "Bad request",
+  "message": "sessionId is required in request body"
+}
+```
+
+- 500 on unexpected errors:
+
+```json
+{
+  "success": false,
+  "error": "Internal server error",
+  "message": "Failed to save call log"
+}
+```
+
 Demo data is in `backend/data/patients.js`. Call logs are stored in-memory in `backend/data/store.js`.
 
 Expose backend with ngrok (required to receive OpenMic webhooks):
@@ -95,6 +227,72 @@ Notes:
 
 - OpenMic APIs do not support a domain field. Domain behavior is encoded in the prompt (description).
 - Webhook URLs are configured in the OpenMic dashboard (not via this UI).
+
+### Frontend API usage (`frontend/lib/api.ts`)
+
+- checkHealth()
+
+  - GET `${NEXT_PUBLIC_BACKEND_URL}/health`
+  - Returns `{ success: boolean, message: string, timestamp: string }`
+
+- getPreCallData()
+
+  - POST `${NEXT_PUBLIC_BACKEND_URL}/precall`
+  - Returns pre-call payload from backend (subset shown):
+
+  ```json
+  {
+    "call": {
+      "dynamic_variables": {
+        "name": "John Smith",
+        "age": 45,
+        "lastVisit": "2024-01-15"
+      }
+    }
+  }
+  ```
+
+- getPatientByMedicalID(medicalID: string)
+
+  - POST `${NEXT_PUBLIC_BACKEND_URL}/getPatient` with body:
+
+  ```json
+  { "medicalID": "PAT001" }
+  ```
+
+  - Returns full patient object (see Backend section for schema).
+
+- submitPostCallData(data)
+
+  - POST `${NEXT_PUBLIC_BACKEND_URL}/postcall` with body:
+
+  ```json
+  {
+    "sessionId": "abc123",
+    "summary": "...",
+    "transcript": [],
+    "dynamicVariables": {}
+  }
+  ```
+
+  - Returns: `{ status: "saved", success: true, sessionId, ... }`
+
+- getCallLogs()
+
+  - GET `${NEXT_PUBLIC_BACKEND_URL}/logs`
+  - Returns `{ success: true, count: number, data: CallLog[] }`
+
+- getOpenMicCalls(params?)
+
+  - GET `https://api.openmic.ai/v1/calls` with optional `{ limit, offset, bot_uid }`
+  - Requires `NEXT_PUBLIC_OPENMIC_API_KEY`
+  - Maps OpenMic response to local `CallLog[]` shape for the UI.
+
+- Bot management via OpenMic API (requires `NEXT_PUBLIC_OPENMIC_API_KEY`):
+  - getBots(): GET `/v1/bots` → maps to local `Bot[]`
+  - createBot(botData): POST `/v1/bots` with fields like `name`, `prompt` (from description), optional `first_message`, `voice`, `voice_speed`, `llm_model_name`, `llm_model_temperature`, and `call_settings`.
+  - updateBot(id, botData): PATCH `/v1/bots/{id}` with same mapping as create
+  - deleteBot(id): DELETE `/v1/bots/{id}`
 
 ---
 
