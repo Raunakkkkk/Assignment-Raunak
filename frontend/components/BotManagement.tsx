@@ -153,7 +153,7 @@ export default function BotManagement({
 
               <div className="pt-2 border-t border-gray-200">
                 <a
-                  href={`https://chat.openmic.ai/dashboard`}
+                  href={`https://chat.openmic.ai/agent`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center space-x-1 text-primary-600 hover:text-primary-700 text-sm"
